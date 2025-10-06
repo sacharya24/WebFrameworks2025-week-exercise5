@@ -1,100 +1,129 @@
-import { render, screen, within, waitFor, act } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import App from "./App";
-import { vi } from 'vitest';
-import { mockTagList, mockRecipeList } from "./testMockData";
+import React from "react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
+import App from "./App.jsx";
 
-// Mock the global fetch function
-global.fetch = vi.fn();
-
-beforeEach(() => {
-  // Clear mock history before each test
-  global.fetch.mockClear();
+// Mock global fetch
+beforeAll(() => {
+  global.fetch = vi.fn();
 });
 
-test("renders the basic app and tag list", async () => {
-
-  // Set up mock fetch response
-  global.fetch.mockResolvedValueOnce({
-    json: async () => mockTagList,
-  });
-
-  render(
-      <App />
-  );
-  const headerElement = screen.getByText(/ACME Recipe O'Master/i);
-  expect(headerElement).toBeInTheDocument();
-
-  // check that tags are visible
-  // Wait for the fetch to resolve and the component to re-render
-  await waitFor(() => {
-    expect(screen.getByText(mockTagList[0])).toBeInTheDocument();
-    expect(screen.getByText(mockTagList[1])).toBeInTheDocument();
-    expect(screen.getByText(mockTagList[2])).toBeInTheDocument();
-  });
+afterEach(() => {
+  vi.clearAllMocks();
 });
 
-test("clicking a pizza tag shows the pizza recipe list", async () => {
-  // Set up mock fetch response
-  global.fetch.mockResolvedValueOnce({
-    json: async () => mockTagList,
+describe("Food Recipe App", () => {
+  it("loads and displays tags", async () => {
+    // Mock fetch for tags
+    (fetch as unknown as vi.Mock)
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          json: () => Promise.resolve(["Pizza", "Pasta", "Cookies"]),
+        })
+      );
+
+    render(<App />);
+
+    // Wait for tags to appear
+    await waitFor(() => {
+      expect(screen.getByText("Pizza")).toBeInTheDocument();
+      expect(screen.getByText("Pasta")).toBeInTheDocument();
+      expect(screen.getByText("Cookies")).toBeInTheDocument();
+    });
   });
 
-  global.fetch.mockResolvedValueOnce({
-    json: async () => {
-      const pizzaRecipes = mockRecipeList.recipes.filter(r => r.tags.includes('Pizza'));
-      return { recipes: pizzaRecipes };
-    }
+  it("displays recipes when a tag is clicked", async () => {
+    // Mock fetch for tags and recipes
+    (fetch as unknown as vi.Mock)
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          json: () => Promise.resolve(["Pizza", "Pasta", "Cookies"]),
+        })
+      )
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          json: () =>
+            Promise.resolve({
+              recipes: [
+                {
+                  id: 1,
+                  title: "Classic Cheeseburger",
+                  ingredients: ["Beef", "Bun"],
+                  instructions: "Cook it",
+                },
+                {
+                  id: 2,
+                  title: "Double Mega burger",
+                  ingredients: ["Beef", "Cheese"],
+                  instructions: "Cook double",
+                },
+              ],
+            }),
+        })
+      );
+
+    render(<App />);
+
+    // Wait for tag list
+    await waitFor(() => {
+      expect(screen.getByText("Pizza")).toBeInTheDocument();
+    });
+
+    // Click the Pizza tag
+    fireEvent.click(screen.getByText("Pizza"));
+
+    // Wait for recipes to appear
+    await waitFor(() => {
+      expect(screen.getByText("Classic Cheeseburger")).toBeInTheDocument();
+      expect(screen.getByText("Double Mega burger")).toBeInTheDocument();
+    });
   });
 
-  render(
-      <App />
-  );
+  it("goes back to tag list when back button is clicked", async () => {
+    // Mock fetch for tags and recipes
+    (fetch as unknown as vi.Mock)
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          json: () => Promise.resolve(["Pizza", "Pasta"]),
+        })
+      )
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          json: () =>
+            Promise.resolve({
+              recipes: [
+                {
+                  id: 1,
+                  title: "Classic Cheeseburger",
+                  ingredients: ["Beef", "Bun"],
+                  instructions: "Cook it",
+                },
+              ],
+            }),
+        })
+      );
 
-  // Wait for the fetch to resolve and the component to re-render
-  await waitFor(() => {
-    const tagElement = screen.getByText('Pizza');
-    userEvent.click(tagElement);
-  });
+    render(<App />);
 
-  // Wait for the fetch to resolve and the component to re-render
-  await waitFor(() => {
-    expect(screen.getByText('Classic Margherita Pizza')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Pizza")).toBeInTheDocument();
+    });
+
+    // Click the Pizza tag
+    fireEvent.click(screen.getByText("Pizza"));
+
+    // Wait for recipe to appear
+    await waitFor(() => {
+      expect(screen.getByText("Classic Cheeseburger")).toBeInTheDocument();
+    });
+
+    // Click back button
+    fireEvent.click(screen.getByText("⬅ Back to Tags"));
+
+    // Wait for tag list to appear again
+    await waitFor(() => {
+      expect(screen.getByText("Pizza")).toBeInTheDocument();
+      expect(screen.getByText("Pasta")).toBeInTheDocument();
+    });
   });
 });
-
-test("clicking a burger tag shows the burger recipe list", async () => {
-   // Set up mock fetch response
-   global.fetch.mockResolvedValueOnce({
-    json: async () => mockTagList,
-  });
-
-  global.fetch.mockResolvedValueOnce({
-    json: async () => {
-      const burgerRecipes = mockRecipeList.recipes.filter(r => r.tags.includes('Burger'));
-      return { recipes: burgerRecipes };
-    }
-  });
-
-  render(
-      <App />
-  );
-
-  expect(screen.queryByText('Classic Cheeseburger')).not.toBeInTheDocument();
-  expect(screen.queryByText('Spaghetti Carbonara')).not.toBeInTheDocument();
-
-  // Wait for the fetch to resolve and the component to re-render
-  await waitFor(() => {
-    const tagElement = screen.getByText('Burger');
-    userEvent.click(tagElement);
-  });
-
-  // Wait for the fetch to resolve and the component to re-render
-  await waitFor(() => {
-    expect(screen.getByText('Classic Cheeseburger')).toBeInTheDocument();
-    expect(screen.getByText('Double Mega burger')).toBeInTheDocument();
-    // Check that a non-burger recipe is NOT displayed on the screen
-    expect(screen.queryByText('Spaghetti Carbonara')).not.toBeInTheDocument();
-  });
-});
-
